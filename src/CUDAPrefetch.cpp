@@ -16,6 +16,8 @@
 // safe.
 //
 ////===----------------------------------------------------------------------===//
+
+// include LLVM header files
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/LoopIterator.h"
 #include "llvm/Analysis/LoopPass.h"
@@ -30,18 +32,13 @@
 #include "llvm/Analysis/BranchProbabilityInfo.h"
 #include "llvm/Analysis/BlockFrequencyInfo.h"
 
-/* *******Implementation Starts Here******* */
-// include necessary header files
+// include NVVM header files
+#include "nvvm.h"
+
+// include standard header files
 #include <vector>
-#include <deque>
-#include <map>
-#include <set>
-#include <stack>
-/* *******Implementation Ends Here******* */
 
 using namespace llvm;
-
-#define DEBUG_TYPE "fplicm"
 
 
 namespace Prefetch {

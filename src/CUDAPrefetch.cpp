@@ -18,22 +18,15 @@
 ////===----------------------------------------------------------------------===//
 
 // include LLVM header files
-#include "llvm/Analysis/LoopInfo.h"
-#include "llvm/Analysis/LoopIterator.h"
-#include "llvm/Analysis/LoopPass.h"
-#include "llvm/IR/CFG.h"
-#include "llvm/IR/Instructions.h"
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/Support/Debug.h"
-#include "llvm/Support/raw_ostream.h"
-#include "llvm/Transforms/Scalar/LoopPassManager.h"
+#include "llvm/IR/Function.h"
+#include "llvm/Pass.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
-#include "llvm/Transforms/Utils/LoopUtils.h"
 #include "llvm/Analysis/BranchProbabilityInfo.h"
 #include "llvm/Analysis/BlockFrequencyInfo.h"
 
 // include NVVM header files
 #include "nvvm.h"
+#include "nvPTXCompiler.h"
 
 // include standard header files
 #include <vector>
@@ -42,31 +35,17 @@ using namespace llvm;
 
 
 namespace Prefetch {
-    struct InsertPrefetchPass : public LoopPass {
+    struct InsertPrefetchPass : public FunctionPass {
         static char ID;
 
-        InsertPrefetchPass() : LoopPass(ID) {}
+        InsertPrefetchPass() : FunctionPass(ID) {}
 
-        bool runOnLoop(Loop *L, LPPassManager &LPM) override {
-
+        virtual bool runOnFunction(Function &F) override {
 
             return false;
         }
 
-
-        void getAnalysisUsage(AnalysisUsage &AU) const override {
-            AU.addRequired<BranchProbabilityInfoWrapperPass>();
-            AU.addRequired<BlockFrequencyInfoWrapperPass>();
-            AU.addRequired<LoopInfoWrapperPass>();
-        }
-
     private:
-        /// Little predicate that returns true if the specified basic block is in
-        /// a subloop of the current one, not the current one itself.
-        bool inSubLoop(BasicBlock *BB, Loop *CurLoop, LoopInfo *LI) {
-            assert(CurLoop->contains(BB) && "Only valid if BB is IN the loop");
-            return LI->getLoopFor(BB) != CurLoop;
-        }
 
     };
 } // end of namespace Prefetch

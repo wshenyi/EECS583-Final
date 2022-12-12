@@ -1,20 +1,24 @@
 PATH2PASS=cmake-build-debug/src/CUDAPrefetch.so
+PASS=-cuda-prefetch
 GPU_ARCH=sm_61
 FLAGS=-g -std=c++11 --cuda-gpu-arch=${GPU_ARCH}
-SOURCE=benchmarks/gaussian.cu
+SOURCE=benchmarks/mytest.cu
 TARGET=result
 
 # Derived Label
 SOURCE_NAME=$(basename $(notdir ${SOURCE}))
 DEVICE_IR=${SOURCE_NAME}-cuda-nvptx64-nvidia-cuda-${GPU_ARCH}.ll
 
-all: compile
+all: run
+
+run: compile
+	./${SOURCE_NAME}.out
 
 compile:
 	clang++ ${SOURCE} -flegacy-pass-manager -Xclang -load -Xclang ${PATH2PASS} -o ${SOURCE_NAME}.out ${FLAGS} -L/usr/local/cuda/lib64 -lcudart_static -ldl -lrt -pthread
 
 apply:
-	opt -enable-new-pm=0 -S -o ${SOURCE_NAME}-opt.ll -load ${PATH2LIB} ${PASS} < ${DEVICE_IR} > /dev/null
+	opt -enable-new-pm=0 -S -o ${SOURCE_NAME}-opt.ll -load ${PATH2PASS} ${PASS} < ${SOURCE_NAME}.ll > /dev/null
 
 ll.ptx:
 	clang++ -stdlib=libstdc++ -S --cuda-gpu-arch=${GPU_ARCH} ${SOURCE}

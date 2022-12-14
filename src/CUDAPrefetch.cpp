@@ -1,8 +1,6 @@
 #include "llvm/Pass.h"
-#include "llvm/Analysis/BlockFrequencyInfo.h"
-#include "llvm/Analysis/BranchProbabilityInfo.h"
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/Format.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Constants.h"
@@ -10,6 +8,7 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/LegacyPassManager.h"
 
 using namespace llvm;
 namespace Prefetch{
@@ -20,7 +19,10 @@ namespace Prefetch{
 
         struct ManagedMemoryInfo{
             ManagedMemoryInfo(Value* Addr, Value* Size, Value* Flags):
-                    addr(Addr), size(Size), flags(Flags){errs() << "Struct\n";}
+                    addr(Addr), size(Size), flags(Flags){}
+            ManagedMemoryInfo(ManagedMemoryInfo&& m): addr(m.addr), size(m.size), flags(m.flags){}
+
+            ~ManagedMemoryInfo(){}
             Value* addr;
             Value* size;
             Value* flags;
@@ -31,20 +33,19 @@ namespace Prefetch{
             errs() << "running on module " <<M.getName() << "\n";
             auto managed_memories = get_managed_memory_addr_and_size(M);
             auto positions = get_insert_positions(M);
+            auto &context = M.getContext();
+            errs() << "Found Position:\n";
             for (auto p: positions) {
                 errs() << *p << "\n";
-                for(auto i:managed_memories){
-//                    errs() << "managed memory: addr " << *i.addr
-//                           << " size " << *i.size << " flag" << *i.flags << "\n";
-//                get_last_modified_place_for_addr_in_main(i.addr);
-
-                    auto &context = M.getContext();
-                    auto *new_load = new LoadInst(Type::getFloatPtrTy(context), i.addr, "preload", p);
+                for(auto &mm:managed_memories){
+//                    errs() << *mm.addr << "\n";
+//                    errs() << *mm.size << "\n";
+                    auto *new_load = new LoadInst(dyn_cast<AllocaInst>(mm.addr)->getAllocatedType(), mm.addr, "preload", p);
                     auto *new_cast = new BitCastInst(new_load, Type::getInt8PtrTy(context), "cast", p);
                     auto *nullpointer= ConstantPointerNull::get(PointerType::get(StructType::getTypeByName(context, "struct.CUstream_st"), 0));
-                    Value* args[] = {new_cast, i.size, ConstantInt::get(Type::getInt32Ty(context), 0), nullpointer};
+                    Value* args[] = {new_cast, mm.size, ConstantInt::get(Type::getInt32Ty(context), 0), nullpointer};
                     auto fun = M.getOrInsertFunction(StringRef("cudaMemPrefetchAsync"), Type::getInt32Ty(context),
-                                                     new_cast->getType(), i.size->getType(), Type::getInt32Ty(context), nullpointer->getType());
+                                                     new_cast->getType(), mm.size->getType(), Type::getInt32Ty(context), nullpointer->getType());
                     auto *prefetch_ins = CallInst::Create(fun, args, "", p);
                 }
             }
@@ -57,8 +58,12 @@ namespace Prefetch{
             for(auto & F : M) {
                 for (auto & bb : F) {
                     for (auto & i : bb) {
-                        if (i.getOpcode() == Instruction::Call || i.getOpcode() == Instruction::Invoke) {
+                        if (i.getOpcode() == Instruction::Call ) {
                             if(std::string(dyn_cast<CallInst>(&i)->getCalledFunction()->getName()).find("__device_stub__") != std::string::npos){
+                                positions.emplace_back(&i);
+                            }
+                        }else if (i.getOpcode() == Instruction::Invoke){
+                            if(std::string(dyn_cast<InvokeInst>(&i)->getCalledFunction()->getName()).find("__device_stub__") != std::string::npos){
                                 positions.emplace_back(&i);
                             }
                         }
@@ -67,24 +72,6 @@ namespace Prefetch{
             }
 
             return std::move(positions);
-        }
-
-        FunctionCallee declarePrefetchFunc(LLVMContext& ctx,
-                                           Module& module){
-            if (StructType *st = StructType::getTypeByName(ctx, "struct.CUstream_st")) {
-                Type* returnType = Type::getInt32Ty(ctx);
-                std::vector<Type*> fArgs { Type::getInt8PtrTy(ctx),
-                                      Type::getInt64Ty(ctx),
-                                      Type::getInt32Ty(ctx),
-                                      st->getPointerTo()
-                };
-                FunctionType* prefetch = FunctionType::get(returnType, fArgs, false);
-                errs() << "Insert prefetch\n";
-                // declare dso_local i32 @cudaMemPrefetchAsync(i8* noundef, i64 noundef, i32 noundef, %struct.CUstream_st* noundef) #1
-                // pass (addr, size, 0, null), where addr require bitcast to i8* first
-                return module.getOrInsertFunction(StringRef("cudaMemPrefetchAsync"), prefetch);
-            }
-            return FunctionCallee(); // how to deal with this ?
         }
 
         std::vector<ManagedMemoryInfo> get_managed_memory_addr_and_size(Module &M){
@@ -128,3 +115,11 @@ char Prefetch::CudaPrefetchPass::ID = 0;
 static RegisterPass<Prefetch::CudaPrefetchPass> X("cuda-prefetch", "Automatically Insert Prefetch Instructions in IR level",
                                             false, false);
 
+
+static void registerPrefetchPass(const PassManagerBuilder &, legacy::PassManagerBase &PM) {
+    PM.add(new Prefetch::CudaPrefetchPass());
+}
+
+static RegisterStandardPasses RegisterMyPass0(PassManagerBuilder::EP_ModuleOptimizerEarly, registerPrefetchPass);
+
+static RegisterStandardPasses RegisterMyPass1(PassManagerBuilder::EP_EnabledOnOptLevel0, registerPrefetchPass);

@@ -11,14 +11,14 @@ DEVICE_NAME=${SOURCE_NAME}-cuda-nvptx64-nvidia-cuda-${GPU_ARCH}
 
 all: run
 
-run: compile
-	./${SOURCE_NAME}-pass.out
+compile-nor:
+	clang++ ${SOURCE} -o ${SOURCE_NAME}.out ${FLAGS} -L/usr/local/cuda/lib64 -lcudart_static -ldl -lrt -pthread
 
 compile:
-	clang++ -flegacy-pass-manager -Xclang -load -Xclang ${PATH2PASS} ${SOURCE} -o ${SOURCE_NAME}-opt.out ${FLAGS} -L/usr/local/cuda/lib64 -lcudart_static -ldl -lrt -pthread
+	clang++ -flegacy-pass-manager -Xclang -load -Xclang ${PATH2PASS} ${SOURCE} -o ${SOURCE_NAME}-pass.out ${FLAGS} -L/usr/local/cuda/lib64 -lcudart_static -ldl -lrt -pthread
 
 apply:
-	opt -enable-new-pm=0 -S -o ${SOURCE_NAME}-opt.ll -load ${PATH2PASS} ${PASS} < ${SOURCE_NAME}.ll > /dev/null
+	opt -enable-new-pm=0 -S -o ${SOURCE_NAME}-pass.ll -load ${PATH2PASS} ${PASS} < ${SOURCE_NAME}.ll > /dev/null
 
 ll.ptx:
 	clang++ -stdlib=libstdc++ -S --cuda-gpu-arch=${GPU_ARCH} ${SOURCE}

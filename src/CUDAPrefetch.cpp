@@ -6,7 +6,7 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Instruction.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
 
@@ -32,21 +32,44 @@ namespace Prefetch{
         virtual bool runOnModule(Module &M) override{
             errs() << "running on module " <<M.getName() << "\n";
             auto managed_memories = get_managed_memory_addr_and_size(M);
+            if (managed_memories.empty()) return false;
             auto positions = get_insert_positions(M);
             auto &context = M.getContext();
             errs() << "Found Position:\n";
+//            auto  p = positions[0]->getParent()->getPrevNode()->getTerminator();
             for (auto p: positions) {
                 errs() << *p << "\n";
                 for(auto &mm:managed_memories){
-//                    errs() << *mm.addr << "\n";
-//                    errs() << *mm.size << "\n";
-                    auto *new_load = new LoadInst(dyn_cast<AllocaInst>(mm.addr)->getAllocatedType(), mm.addr, "preload", p);
+
+                    auto alloc_inst = dyn_cast<AllocaInst>(mm.addr);
+                    auto global_var = dyn_cast<GlobalValue>(mm.addr);
+                    Type* ty = alloc_inst != nullptr ? alloc_inst->getAllocatedType() : global_var->getValueType();
+                    auto *new_load = new LoadInst(ty, mm.addr, "preload", p);
                     auto *new_cast = new BitCastInst(new_load, Type::getInt8PtrTy(context), "cast", p);
                     auto *nullpointer= ConstantPointerNull::get(PointerType::get(StructType::getTypeByName(context, "struct.CUstream_st"), 0));
-                    Value* args[] = {new_cast, mm.size, ConstantInt::get(Type::getInt32Ty(context), 0), nullpointer};
+                    auto *new_size = mm.size;
+//                    auto *new_size = dyn_cast<Instruction>(mm.size)->clone();
+//                    new_size->insertBefore(p);
+                    Value* args[] = {new_cast, new_size, ConstantInt::get(Type::getInt32Ty(context), 0), nullpointer};
                     auto fun = M.getOrInsertFunction(StringRef("cudaMemPrefetchAsync"), Type::getInt32Ty(context),
-                                                     new_cast->getType(), mm.size->getType(), Type::getInt32Ty(context), nullpointer->getType());
+                                                     new_cast->getType(), new_size->getType(), Type::getInt32Ty(context), nullpointer->getType());
                     auto *prefetch_ins = CallInst::Create(fun, args, "", p);
+
+//                    Instruction *cur = p;
+//                    auto end = dyn_cast<Instruction>(mm.size)->getParent()->getFirstNonPHI();
+//                    do {
+//                        new_inst->clone()->insertBefore(cur);
+//                        new_inst = new_inst->getPrevNode();
+//                        cur = cur->getPrevNode();
+//                    }while (new_inst != end);
+
+//                    auto i = new_load->getPrevNode();
+//                    errs() << "=================\n";
+//                    while (i != p) {
+//                        errs() << *i << "\n";
+//                        i = i->getNextNode();
+//                    }
+//                    errs() << "=================\n";
                 }
             }
             return false; // template code is just return false

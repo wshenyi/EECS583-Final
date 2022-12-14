@@ -1,35 +1,42 @@
 #include <iostream>
 #include <math.h>
 #include "cuda.h"
-// Kernel function to add the elements of two arrays
+
+// CUDA kernel to add elements of two arrays
 __global__
 void add(int n, float *x, float *y)
 {
-    for (int i = 0; i < n; i++)
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = blockDim.x * gridDim.x;
+    for (int i = index; i < n; i += stride)
         y[i] = x[i] + y[i];
 }
 
 int main(void)
 {
-    int N = 1<<20;
+    int N = 1<<22;
     float *x, *y;
 
-    // Allocate Unified Memory – accessible from CPU or GPU
+    // Allocate Unified Memory -- accessible from CPU or GPU
     cudaMallocManaged(&x, N*sizeof(float));
     cudaMallocManaged(&y, N*sizeof(float));
 
     // initialize x and y arrays on the host
     for (int i = 0; i < N; i++) {
         x[i] = 1.0f;
-    }
-
-    for (int i = 0; i < N; i++) {
         y[i] = 2.0f;
     }
 
+    // Prefetch the data to the GPU
+    int device = -1;
+    cudaGetDevice(&device);
+    cudaMemPrefetchAsync(x, N*sizeof(float), device, NULL);
+    cudaMemPrefetchAsync(y, N*sizeof(float), device, NULL);
 
-    // Run kernel on 1M elements on the GPU
-    add<<<1, 1>>>(N, x, y);
+    // Launch kernel on 1M elements on the GPU
+    int blockSize = 256;
+    int numBlocks = (N + blockSize - 1) / blockSize;
+    add<<<numBlocks, blockSize>>>(N, x, y);
 
     // Wait for GPU to finish before accessing on host
     cudaDeviceSynchronize();

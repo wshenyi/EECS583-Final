@@ -1,23 +1,23 @@
 PATH2PASS=cmake-build-debug/src/CUDAPrefetch.so
 PASS=-cuda-prefetch
 GPU_ARCH=sm_61
-FLAGS=-g -std=c++11 --cuda-gpu-arch=${GPU_ARCH}
+FLAGS=-std=c++11 --cuda-gpu-arch=${GPU_ARCH}
 SOURCE=benchmarks/mytest.cu
 TARGET=result
 
 # Derived Label
 SOURCE_NAME=$(basename $(notdir ${SOURCE}))
-DEVICE_IR=${SOURCE_NAME}-cuda-nvptx64-nvidia-cuda-${GPU_ARCH}.ll
+DEVICE_NAME=${SOURCE_NAME}-cuda-nvptx64-nvidia-cuda-${GPU_ARCH}
 
 all: run
 
 run: compile
-	./${SOURCE_NAME}.out
+	./${SOURCE_NAME}-pass.out
 
 compile:
-	clang++ ${SOURCE} -flegacy-pass-manager -Xclang -load -Xclang ${PATH2PASS} -o ${SOURCE_NAME}.out ${FLAGS} -L/usr/local/cuda/lib64 -lcudart_static -ldl -lrt -pthread
+	clang++ -flegacy-pass-manager -Xclang -load -Xclang ${PATH2PASS} ${SOURCE} -o ${SOURCE_NAME}-pass.out ${FLAGS} -L/usr/local/cuda/lib64 -lcudart_static -ldl -lrt -pthread
 
-apply:
+apply: ll
 	opt -enable-new-pm=0 -S -o ${SOURCE_NAME}-opt.ll -load ${PATH2PASS} ${PASS} < ${SOURCE_NAME}.ll > /dev/null
 
 ll.ptx:
@@ -48,7 +48,7 @@ asm:
 	-internal-isystem /usr/lib/gcc/x86_64-linux-gnu/12/../../../../x86_64-linux-gnu/include -internal-externc-isystem /usr/include/x86_64-linux-gnu \
 	-internal-externc-isystem /include -internal-externc-isystem /usr/include -fdeprecated-macro -fno-autolink \
 	-fdebug-compilation-dir=/home/wshenyi/eecs583/final -ferror-limit 19 -pthread -fgnuc-version=4.2.1 -fcxx-exceptions -fexceptions -fcolor-diagnostics \
-	-cuid=8ddc1cd25f6e9af3 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -std=c++11 -o ${SOURCE_NAME}.asm -x cuda ${SOURCE}
+	-cuid=8ddc1cd25f6e9af3 -D__GCC_HAVE_DWARF2_CFI_ASM=1 -std=c++11 -o ${SOURCE_NAME}.s -x cuda ${SOURCE}
 
 clean:
 	rm -f *.ll *.bc *.ptx *.out *.s *.cubin
